@@ -79,6 +79,36 @@ graph TB
 - **PCAP Monitor**: Real-time network traffic analysis and anomaly detection
 - **Database**: SQLite storage for devices and anomalies
 
+### Detected BACnet issues
+
+The PCAP monitor decodes BACnet/IP (including BBMD Forwarded-NPDUs), BACnet/Ethernet and MS/TP
+(Wireshark link type 165) down to the application layer and reports the issues below. BACnet/IP is
+recognised on any UDP port, not only 47808, and captures are streamed so large files fit in memory.
+
+| Area | Anomaly types |
+|------|---------------|
+| Addressing | `duplicate_ip`, `arp_conflict`, `duplicate_instance`, `multi_instance_ip`, `mac_multi_ip`, `mstp_conflict`, `device_identity_change`, `invalid_device_instance` |
+| Transactions | `device_unresponsive`, `request_timeouts`, `file_transfer_failed`, `file_transfer_stalled`, `backup_restore_incomplete`, `backup_restore`, `request_retries`, `slow_response`, `device_busy`, `bacnet_errors`, `bacnet_reject`, `bacnet_abort`, `segmentation_issue` |
+| Security | `sensitive_command` (DeviceCommunicationControl, ReinitializeDevice, AtomicWriteFile, Create/DeleteObject, priority 1-2 writes, Initialize-Routing-Table), `access_denied`, `cleartext_password`, `password_bruteforce`, `bbmd_config_change`, `bbmd_reconnaissance`, `foreign_device_registration` |
+| Traffic | `broadcast_storm`, `remote_network_load`, `who_is_flood`, `i_am_flood`, `cov_flood`, `service_flood`, `duplicate_broadcast`, `missing_device`, `time_sync_conflict`, `protocol_violation` |
+| Network layer | `router_conflict`, `network_number_conflict`, `network_reject`, `router_busy`, `who_is_router_flood`, `unreachable_network`, `routing_loop`, `excessive_hops` |
+| Link layer | `bvlc_nak`, `nonstandard_port`, `malformed_packet`, `mstp_crc_error`, `mstp_invalid_master`, `duplicate_packets` |
+
+Each anomaly carries a `recommended_action` in its details. Rate and timing limits are in
+`DetectionThresholds` in `bacnet/bacnet_parser.py`. To analyse a capture without the web UI:
+
+```bash
+uv run python -m bacnet.bacnet_parser pcap_files/capture.pcap
+```
+
+`tests/make_test_pcaps.py <repo> <outdir>` writes synthetic captures that trigger most detectors.
+
+Packet decoding runs in parallel worker processes for captures larger than 4 MB (one worker per
+CPU core minus the one running the analysis, i.e. 5 on i.MX 95). Set `BACNET_PARSER_WORKERS` to
+change this (`1` disables the pool), or pass `--workers N` to `python -m bacnet.bacnet_parser`.
+Ethernet/VLAN/802.3, Linux cooked, raw IP and MS/TP captures are decoded straight from the bytes;
+other link types fall back to scapy.
+
 ## 2. Hardware<a name="step2"></a>
 
 - i.MX Board
@@ -163,7 +193,34 @@ $ fetch_models --repo-id nxp/Qwen2.5-7B-Instruct-Ara240
 
 ### 3.4 Run Agentic Network Management System 
 
-On another two terminals:
+The simplest way is the start script. It waits until the connector reports the model as
+ready on the Ara240 (`/v1/models` shows `"ready":true`), then starts the MCP server, waits
+for it to listen, and runs the web backend. Ctrl+C stops both:
+```bash
+cd <project>
+uv sync
+./start-demo.sh
+```
+This also works when the connector runs as the `eiq-aaf-connector` systemd service, which
+takes a minute or more after boot to load the model. Override the connector address with
+`CONNECTOR_URL` (default `http://127.0.0.1:8000`) and the wait limit with `CONNECTOR_TIMEOUT`
+(default 600 seconds).
+
+To start the demo automatically at boot, install the two systemd services in `systemd/`
+(they assume the project is at `/usr/share/dm-agentic-ai-network-management`; edit the paths
+otherwise). Enable the connector service too:
+```bash
+cp systemd/bacnet-mcp.service systemd/bacnet-backend.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now eiq-aaf-connector.service bacnet-mcp.service bacnet-backend.service
+```
+`bacnet-mcp` starts the MCP server. `bacnet-backend` starts after it and after the
+connector, and waits (`start-demo.sh --wait-connector`) until the model is ready before
+running the web backend. Follow progress with `journalctl -fu bacnet-backend`, and use
+`systemctl restart bacnet-backend` to restart the demo without reloading the model.
+Stop the services before running `start-demo.sh` by hand, as both use ports 8080 and 8081.
+
+Or start the parts by hand, once the connector is ready, on another two terminals:
 ```bash
 cd <project>
 uv sync
@@ -174,6 +231,35 @@ cd <project>
 uv run web/backend.py 
 ```
 ***Note:*** *uv* is installed at Step 1 when eIQ AAF Connector is installed. If any issue, try installing manually.
+
+#### Live capture (optional)
+
+`bacnet-capture.sh` captures live traffic with Wireshark's `dumpcap` and feeds it to the
+demo. It writes to a staging folder (`/var/lib/bacnet-capture`), starts a new file every
+5 minutes, and moves each finished file into `pcap_files` as
+`capture_<date>_<time>.pcapng`, where the demo analyzes it once. Intervals with no
+packets are dropped, and only the newest 24 `capture_*` files are kept (other files in
+`pcap_files` are never touched).
+
+Install it as a service; it is not enabled, so it only runs when started:
+```bash
+cp systemd/bacnet-capture.service /etc/systemd/system/
+cp systemd/bacnet-capture.default /etc/default/bacnet-capture
+systemctl daemon-reload
+systemctl start bacnet-capture       # stop with: systemctl stop bacnet-capture
+journalctl -fu bacnet-capture        # one line per finished capture file
+```
+On stop, the file in progress is moved into `pcap_files` too. To capture at every boot,
+`systemctl enable bacnet-capture`.
+
+Settings live in `/etc/default/bacnet-capture` (restart the service after changing them):
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `CAPTURE_INTERFACE` | `eth0` | Interface to capture on (`dumpcap -D` lists them) |
+| `CAPTURE_FILTER` | all UDP, ARP and BACnet/Ethernet | Capture filter; UDP on any port catches BACnet/IP on non-standard ports |
+| `ROTATE_SECONDS` | `300` | Seconds per capture file |
+| `KEEP_FILES` | `24` | Capture files kept in `pcap_files` |
 
 ### 3.5 Access the Web Dashboard
 

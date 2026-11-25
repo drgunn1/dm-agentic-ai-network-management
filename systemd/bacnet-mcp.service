@@ -1,0 +1,23 @@
+# BACnet Security MCP server (port 8081) for the Agentic Network Management demo.
+# Install: see README section 3.4.
+[Unit]
+Description=BACnet Security MCP Server (Agentic Network Management demo)
+After=network.target
+# Give up after 3 failed starts in 10 minutes (e.g. ports taken by a manual run)
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+[Service]
+Type=simple
+WorkingDirectory=/usr/share/dm-agentic-ai-network-management
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/share/dm-agentic-ai-network-management/.venv/bin/python mcp/mcp_server.py
+# Only report "started" once the server accepts connections on port 8081
+# (curl exits with 7 while nothing is listening).
+ExecStartPost=/bin/sh -c 'for i in $(seq 1 60); do curl -s -o /dev/null --max-time 2 http://127.0.0.1:8081/mcp; [ $? -ne 7 ] && exit 0; sleep 1; done; exit 1'
+TimeoutStartSec=90
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

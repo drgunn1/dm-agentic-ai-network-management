@@ -1,0 +1,22 @@
+# Captures network traffic with Wireshark's dumpcap into pcap_files for the
+# Agentic Network Management demo. Not enabled by default; start it with
+#   systemctl start bacnet-capture
+# Settings go in /etc/default/bacnet-capture (see bacnet-capture.sh).
+[Unit]
+Description=BACnet network capture into pcap_files (Wireshark dumpcap)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/bacnet-capture
+ExecStart=/usr/share/dm-agentic-ai-network-management/bacnet-capture.sh
+KillMode=mixed
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target
