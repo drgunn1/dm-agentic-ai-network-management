@@ -3,7 +3,8 @@ Copyright 2026 NXP
 SPDX-License-Identifier: BSD-3-Clause
 
 PCAP File Monitor for BACnet Network Analysis
-Continuously processes PCAP files in a loop to simulate real network monitoring.
+Watches a directory of PCAP files and analyzes each one when it is new or has
+changed since it was last analyzed.
 """
 
 
@@ -18,20 +19,25 @@ from .anomaly_event import AnomalyEvent
 
 class PCAPMonitor:
     """
-    Monitors PCAP files and processes them continuously in a loop.
-    Simulates real-time network monitoring by processing files repeatedly.
+    Monitors a directory of PCAP files. A file is analyzed when it first
+    appears and again only after its size or modification time changes;
+    parse records are kept in the database, so they survive restarts.
     """
     
-    def __init__(self, pcap_directory: str, poll_interval: int = 60):
+    def __init__(self, pcap_directory: str, poll_interval: int = 60,
+                 anomaly_interval: float = 0):
         """
         Initialize the PCAP monitor.
-        
+
         Args:
             pcap_directory: Directory containing PCAP files
-            poll_interval: Seconds between processing each file (default: 60)
+            poll_interval: Seconds between checks for new or changed files (default: 60)
+            anomaly_interval: Seconds to pause after reporting each anomaly, to
+                drip-feed them to the dashboard (default: 0, report all at once)
         """
         self.pcap_directory = Path(pcap_directory)
         self.poll_interval = poll_interval
+        self.anomaly_interval = anomaly_interval
         self.storage = AnomalyStorage()
         self.parser = BACnetParser()
         self.running = False
@@ -53,7 +59,32 @@ class PCAPMonitor:
             files.extend(self.pcap_directory.glob(f'*{ext}'))
         
         return sorted(files)
-    
+
+    @staticmethod
+    def _fingerprint(file_path: Path):
+        """(size, mtime_ns) of a capture, or None if it can't be read."""
+        try:
+            st = file_path.stat()
+        except OSError:
+            return None
+        return st.st_size, st.st_mtime_ns
+
+    def get_changed_files(self, pcap_files: List[Path]) -> List[tuple]:
+        """
+        Return [(path, fingerprint)] for the captures that are new or have
+        changed (size or modification time) since they were last analyzed.
+        Parse records of captures that no longer exist are dropped.
+        """
+        parsed = self.storage.get_parsed_files()
+        keys = [str(p.resolve()) for p in pcap_files]
+        self.storage.forget_parsed_files(keep=keys)
+        changed = []
+        for path, key in zip(pcap_files, keys):
+            fp = self._fingerprint(path)
+            if fp is not None and parsed.get(key) != fp:
+                changed.append((path, fp))
+        return changed
+
     async def process_file(self, file_path: Path):
         """Process a single PCAP file."""
         try:
@@ -61,7 +92,9 @@ class PCAPMonitor:
             print(f"[*] Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             
             # Parse the PCAP file
-            results = self.parser.analyze_pcap(str(file_path))
+            # Parse in a thread so the web server's event loop stays responsive;
+            # the parser spreads packet decoding over the CPU cores itself.
+            results = await asyncio.to_thread(self.parser.analyze_pcap, str(file_path))
             
             if not results:
                 print(f"[!] No BACnet data found in {file_path.name}")
@@ -94,8 +127,9 @@ class PCAPMonitor:
                     await self.anomaly_event.notify(anomaly_data)
                     
                     print(f"  - {anomaly['type']}: {anomaly['description']}")
-                    
-                    await asyncio.sleep(self.poll_interval)
+
+                    if self.anomaly_interval > 0:
+                        await asyncio.sleep(self.anomaly_interval)
             else:
                 print(f"[✓] No anomalies detected")
             
@@ -134,29 +168,34 @@ class PCAPMonitor:
                     await asyncio.sleep(self.poll_interval)
                     continue
                 
+                # Only analyze captures that are new or changed since their last parse
+                changed = self.get_changed_files(pcap_files)
+                if not changed:
+                    await asyncio.sleep(self.poll_interval)
+                    continue
+
                 cycle_count += 1
                 print(f"\n{'=' * 70}")
                 print(f"Processing Cycle #{cycle_count}")
-                print(f"Files to process: {len(pcap_files)}")
+                print(f"Files to process: {len(changed)} new or changed "
+                      f"({len(pcap_files) - len(changed)} unchanged, skipped)")
                 print(f"{'=' * 70}")
-                
+
                 # Process each file
-                for file_path in pcap_files:
+                for file_path, (size, mtime_ns) in changed:
                     if not self.running:
                         break
-                    
+
                     await self.process_file(file_path)
-                    
-                    # Wait between files
-                    if file_path != pcap_files[-1]:  # Don't wait after last file
-                        print(f"\n[*] Waiting {self.poll_interval} seconds before next file...")
-                        #await asyncio.sleep(self.poll_interval)
-                
+                    # Record the state the file had before parsing, so a capture
+                    # still being written during the parse is analyzed again
+                    self.storage.mark_file_parsed(str(file_path.resolve()), size, mtime_ns)
+
                 # After processing all files, wait before starting next cycle
                 if self.running:
                     print(f"\n[*] Cycle #{cycle_count} complete")
-                    print(f"[*] Waiting {self.poll_interval} seconds before next cycle...")
-                    #await asyncio.sleep(self.poll_interval)
+                    print(f"[*] Checking for new or changed files every {self.poll_interval} seconds...")
+                    await asyncio.sleep(self.poll_interval)
             
             except asyncio.CancelledError:
                 print("\n[*] Monitor stopped")
@@ -171,4 +210,5 @@ class PCAPMonitor:
         """Stop the monitoring loop."""
         print("\n[*] Stopping PCAP monitor...")
         self.running = False
+        self.parser.close()
 
