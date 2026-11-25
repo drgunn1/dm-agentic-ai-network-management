@@ -37,6 +37,7 @@ class WebSocketManager {
     }
 
     handleMessage(event) {
+        if (event.data === 'pong') return; // keep-alive reply to our 'ping'
         try {
             const data = JSON.parse(event.data);
             this.eventBus.emit(`ws:${data.type}`, data.data);
@@ -197,7 +198,54 @@ class AnomalyFormatter {
             'duplicate_instance': 'Duplicate Device Instance',
             'multi_instance_ip': 'Multi-Instance IP',
             'mac_multi_ip': 'MAC with Multiple IPs',
-            'arp_conflict': 'ARP Conflict'
+            'arp_conflict': 'ARP Conflict',
+            'mstp_conflict': 'MS/TP Address Conflict',
+            'device_identity_change': 'Device Identity Change',
+            'invalid_device_instance': 'Invalid Device Instance',
+            'device_unresponsive': 'Device Unresponsive',
+            'request_timeouts': 'Request Timeouts',
+            'request_retries': 'Request Retries',
+            'slow_response': 'Slow Response',
+            'access_denied': 'Access Denied',
+            'device_busy': 'Device Busy',
+            'bacnet_errors': 'BACnet Error PDUs',
+            'bacnet_reject': 'BACnet Reject',
+            'bacnet_abort': 'BACnet Abort',
+            'segmentation_issue': 'Segmentation Issue',
+            'sensitive_command': 'Sensitive Command',
+            'cleartext_password': 'Cleartext Password',
+            'password_bruteforce': 'Password Brute Force',
+            'bbmd_config_change': 'BBMD Table Change',
+            'bbmd_reconnaissance': 'BBMD Table Read',
+            'foreign_device_registration': 'Foreign Device Registration',
+            'who_is_flood': 'Who-Is Flood',
+            'i_am_flood': 'I-Am Flood',
+            'cov_flood': 'COV Notification Flood',
+            'service_flood': 'Service Flood',
+            'broadcast_storm': 'Broadcast Storm',
+            'duplicate_broadcast': 'Duplicate Broadcast (BBMD)',
+            'missing_device': 'Missing Device',
+            'time_sync_conflict': 'Time Sync Conflict',
+            'protocol_violation': 'Protocol Violation',
+            'router_conflict': 'Router Conflict',
+            'network_number_conflict': 'Network Number Conflict',
+            'network_reject': 'Network Reject',
+            'router_busy': 'Router Busy',
+            'who_is_router_flood': 'Who-Is-Router Flood',
+            'unreachable_network': 'Unreachable Network',
+            'routing_loop': 'Routing Loop',
+            'excessive_hops': 'Excessive Hops',
+            'bvlc_nak': 'BVLC NAK',
+            'nonstandard_port': 'Non-standard Port',
+            'malformed_packet': 'Malformed Packet',
+            'mstp_crc_error': 'MS/TP CRC Error',
+            'mstp_invalid_master': 'Invalid MS/TP Master',
+            'file_transfer_failed': 'File Transfer Failed',
+            'file_transfer_stalled': 'File Transfer Stalled',
+            'backup_restore_incomplete': 'Backup/Restore Incomplete',
+            'backup_restore': 'Backup/Restore Run',
+            'duplicate_packets': 'Duplicate Packets',
+            'remote_network_load': 'Remote Network Load'
         };
         return typeMap[type] || type;
     }
@@ -333,6 +381,19 @@ class DashboardController extends BaseViewController {
 
         const networkStatus = this.calculateNetworkStatus(stats.recent_anomalies_24h);
         this.updateElement('networkStatus', networkStatus);
+        this.updateStatusIcon(networkStatus);
+    }
+
+    // Match the status card's icon and colour to the status text
+    updateStatusIcon(status) {
+        const box = document.getElementById('networkStatusIcon');
+        if (!box) return;
+        const [color, icon] = {
+            'At Risk': ['red', 'fa-exclamation-triangle'],
+            'Warning': ['orange', 'fa-exclamation-circle'],
+        }[status] || ['green', 'fa-check-circle'];
+        box.className = `stat-icon ${color}`;
+        box.innerHTML = `<i class="fas ${icon}"></i>`;
     }
 
     calculateNetworkStatus(recentAnomalies) {

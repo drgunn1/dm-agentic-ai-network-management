@@ -37,18 +37,42 @@ class DevicesResponse(BaseModel):
     devices: list[DeviceInfo]
 
 class AnomalyInfo(BaseModel):
-    id: int
+    # Compact on purpose: the whole LLM prompt (system prompt, tool definitions,
+    # question and this result) must fit in the connector's 2047-token window.
     anomaly_type: str
     severity: str
     description: str
-    details: dict = Field(default_factory=dict)
+    action: Optional[str] = None
     timestamp: str
-    resolved: bool = False
 
 class AnomaliesResponse(BaseModel):
     status: str
     count: int
+    total: int = 0
+    omitted: int = 0
     anomalies: list[AnomalyInfo]
+
+# Character budget for the anomalies returned (about 900 tokens; IPs and JSON
+# punctuation tokenize at ~2.6 characters per token). The web backend shows this
+# result itself and only sends it to the model in a short prompt asking for a
+# comment (about 1,100 tokens in all), well inside the 2047-token window.
+ANOMALY_RESULT_BUDGET = 2400
+SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+
+
+def _clip(text: str, n: int) -> str:
+    return text if len(text) <= n else text[:n - 3].rstrip() + "..."
+
+
+def _compact_anomaly(a: dict) -> AnomalyInfo:
+    action = (a.get("details") or {}).get("recommended_action")
+    return AnomalyInfo(
+        anomaly_type=a["anomaly_type"],
+        severity=a["severity"],
+        description=_clip(a["description"], 160),
+        action=_clip(action, 120) if action else None,
+        timestamp=a["timestamp"][:19].replace("T", " "),
+    )
 
 class StatisticsInfo(BaseModel):
     total_devices: int = 0
@@ -81,20 +105,36 @@ storage = AnomalyStorage()
 
 @mcp.tool()
 def get_bacnet_anomalies(limit: int = 5) -> AnomaliesResponse:
-    """Retrieves recent BACnet network anomalies.
+    """Retrieves the most severe BACnet network anomalies, most severe first.
 
     Args:
-        limit: Last number of anomalies to retrieve ordered by most recent first (default: 5).
+        limit: Maximum number of anomalies to return (default: 5). Only as many as
+            fit in the model's context are returned; "omitted" counts the rest.
 
     Returns:
-        AnomaliesResponse: List of recent anomalies.
+        AnomaliesResponse: Anomalies with type, severity, description,
+        recommended action and timestamp.
     """
     logger.info(f"Tool: get_bacnet_anomalies called with limit={limit}")
-    anomalies = storage.get_recent_anomalies(limit=limit)
+    # Rank the latest 200 (the database is cleared at every start) by severity,
+    # so a critical anomaly is never hidden behind newer low ones.
+    recent = storage.get_recent_anomalies(limit=200)
+    recent.sort(key=lambda a: (SEVERITY_RANK.get(a["severity"], 9), -a["id"]))
+
+    selected, used = [], 0
+    for a in recent:
+        item = _compact_anomaly(a)
+        size = len(item.model_dump_json())
+        if len(selected) >= max(1, limit) or (selected and used + size > ANOMALY_RESULT_BUDGET):
+            break
+        selected.append(item)
+        used += size
     return AnomaliesResponse(
         status="success",
-        anomalies=[AnomalyInfo(**a) for a in anomalies],
-        count=len(anomalies),
+        anomalies=selected,
+        count=len(selected),
+        total=len(recent),
+        omitted=len(recent) - len(selected),
     )
 
 

@@ -1,0 +1,15 @@
+# Settings for bacnet-capture.service (install as /etc/default/bacnet-capture).
+# Uncomment and edit, then: systemctl restart bacnet-capture
+
+# Interface to capture on (list them with: dumpcap -D)
+#CAPTURE_INTERFACE=eth0
+
+# Capture filter (BPF). Default: all UDP (BACnet/IP on any port), ARP, and
+# BACnet/Ethernet frames. For standard BACnet/IP ports only:
+#CAPTURE_FILTER="udp portrange 47808-47823 or arp"
+
+# Seconds per capture file; each finished file is analyzed by the demo once
+#ROTATE_SECONDS=300
+
+# Number of capture_*.pcapng files kept in pcap_files (oldest are deleted)
+#KEEP_FILES=24

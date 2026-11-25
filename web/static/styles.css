@@ -70,9 +70,39 @@ body {
     gap: 2rem;
 }
 
-.nxp-logo {
+.brand-logos {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.brand-logo {
     height: 40px;
     width: auto;
+}
+
+/* The Future Electronics logo has black lettering, so it sits on a white
+   badge to stay readable on the dark header. */
+.future-logo {
+    height: 44px;
+    background: #fff;
+    border-radius: 6px;
+    padding: 4px 8px;
+}
+
+/* Keep the title and both logos on one header line on smaller screens */
+@media (max-width: 1280px) {
+    .header h1 {
+        font-size: 1.1rem;
+    }
+
+    .brand-logo {
+        height: 32px;
+    }
+
+    .future-logo {
+        height: 36px;
+    }
 }
 
 .status-indicator {
@@ -371,6 +401,10 @@ tr:hover {
     border-left-color: var(--secondary-color);
 }
 
+.anomaly-item.low {
+    border-left-color: var(--success-color);
+}
+
 .anomaly-header {
     display: flex;
     justify-content: space-between;
@@ -404,6 +438,11 @@ tr:hover {
 .severity-medium {
     background: rgba(0, 168, 225, 0.2);
     color: var(--secondary-color);
+}
+
+.severity-low {
+    background: rgba(40, 167, 69, 0.2);
+    color: var(--success-color);
 }
 
 .anomaly-description {

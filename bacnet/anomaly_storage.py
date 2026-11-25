@@ -10,7 +10,7 @@ import sqlite3
 import json
 from pathlib import Path
 from typing import List, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 class AnomalyStorage:
@@ -68,10 +68,54 @@ class AnomalyStorage:
                 data TEXT
             )
         """)
-        
+
+        # Capture files already analyzed, so unchanged files are not parsed again
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS parsed_files (
+                path TEXT PRIMARY KEY,
+                size INTEGER NOT NULL,
+                mtime_ns INTEGER NOT NULL,
+                parsed_at TEXT NOT NULL
+            )
+        """)
+
         conn.commit()
         conn.close()
-    
+
+    def get_parsed_files(self) -> Dict[str, tuple]:
+        """Return {path: (size, mtime_ns)} for every capture analyzed so far."""
+        conn = sqlite3.connect(self.db_path)
+        try:
+            rows = conn.execute("SELECT path, size, mtime_ns FROM parsed_files").fetchall()
+        finally:
+            conn.close()
+        return {path: (size, mtime_ns) for path, size, mtime_ns in rows}
+
+    def mark_file_parsed(self, path: str, size: int, mtime_ns: int):
+        """Record the size and modification time a capture had when it was analyzed."""
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute(
+                "INSERT OR REPLACE INTO parsed_files (path, size, mtime_ns, parsed_at) "
+                "VALUES (?, ?, ?, ?)",
+                (path, size, mtime_ns, datetime.now().isoformat()))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def forget_parsed_files(self, keep: Optional[List[str]] = None):
+        """Drop parse records, except for the paths in keep (all when keep is None)."""
+        conn = sqlite3.connect(self.db_path)
+        try:
+            if keep is None:
+                conn.execute("DELETE FROM parsed_files")
+            else:
+                for path in set(self.get_parsed_files()) - set(keep):
+                    conn.execute("DELETE FROM parsed_files WHERE path = ?", (path,))
+            conn.commit()
+        finally:
+            conn.close()
+
     def store_device(self, device: dict):
         """
         Store or update a BACnet device.
@@ -288,6 +332,14 @@ class AnomalyStorage:
         """)
         type_counts = dict(cursor.fetchall())
         
+        # Unresolved anomalies detected in the last 24 hours (the dashboard's
+        # "Last 24 Hours" card and network status use this). Timestamps are
+        # ISO strings, so they compare correctly as text.
+        since = (datetime.now() - timedelta(hours=24)).isoformat()
+        cursor.execute(
+            "SELECT COUNT(*) FROM anomalies WHERE resolved = 0 AND timestamp >= ?", (since,))
+        recent_anomalies_24h = cursor.fetchone()[0]
+
         # Total packets
         cursor.execute("SELECT SUM(packet_count) FROM devices")
         total_packets = cursor.fetchone()[0] or 0
@@ -298,6 +350,7 @@ class AnomalyStorage:
             'total_devices': total_devices,
             'total_anomalies': total_anomalies,
             'unresolved_anomalies': unresolved_anomalies,
+            'recent_anomalies_24h': recent_anomalies_24h,
             'total_packets': total_packets,
             'severity_counts': severity_counts,
             'type_counts': type_counts,
@@ -330,7 +383,9 @@ class AnomalyStorage:
         cursor.execute("DELETE FROM devices")
         cursor.execute("DELETE FROM anomalies")
         cursor.execute("DELETE FROM statistics")
-        
+        # With the results gone, every capture must be analyzed again
+        cursor.execute("DELETE FROM parsed_files")
+
         conn.commit()
         conn.close()
 

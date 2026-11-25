@@ -1,0 +1,25 @@
+# Web backend and dashboard (port 8080) for the Agentic Network Management demo.
+# Starts after the MCP server, and only once the eIQ AAF Connector reports its
+# model ready on the Ara240. Install: see README section 3.4.
+[Unit]
+Description=BACnet Agentic Network Management dashboard and agent
+Requires=bacnet-mcp.service
+After=bacnet-mcp.service eiq-aaf-connector.service
+# Give up after 3 failed starts in 10 minutes (e.g. ports taken by a manual run)
+StartLimitIntervalSec=600
+StartLimitBurst=3
+Wants=eiq-aaf-connector.service
+
+[Service]
+Type=simple
+WorkingDirectory=/usr/share/dm-agentic-ai-network-management
+Environment=PYTHONUNBUFFERED=1
+# Wait (up to 10 minutes) until the connector's /v1/models shows the model ready
+ExecStartPre=/usr/share/dm-agentic-ai-network-management/start-demo.sh --wait-connector
+ExecStart=/usr/share/dm-agentic-ai-network-management/.venv/bin/python web/backend.py
+TimeoutStartSec=660
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target
