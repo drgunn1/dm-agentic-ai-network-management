@@ -70,14 +70,39 @@ body {
     gap: 2rem;
 }
 
+.brand-logos {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.brand-logo {
+    height: 40px;
+    width: auto;
+}
+
 /* The Future Electronics logo has black lettering, so it sits on a white
    badge to stay readable on the dark header. */
-.brand-logo {
+.future-logo {
     height: 44px;
-    width: auto;
     background: #fff;
     border-radius: 6px;
     padding: 4px 8px;
+}
+
+/* Keep the title and both logos on one header line on smaller screens */
+@media (max-width: 1280px) {
+    .header h1 {
+        font-size: 1.1rem;
+    }
+
+    .brand-logo {
+        height: 32px;
+    }
+
+    .future-logo {
+        height: 36px;
+    }
 }
 
 .status-indicator {

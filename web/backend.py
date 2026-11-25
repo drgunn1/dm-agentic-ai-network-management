@@ -807,7 +807,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Future Agentic AI Network Monitoring System",
+    title="Future/NXP Agentic AI Network Monitoring System",
     lifespan=lifespan
 )
 
