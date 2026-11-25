@@ -371,6 +371,10 @@ tr:hover {
     border-left-color: var(--secondary-color);
 }
 
+.anomaly-item.low {
+    border-left-color: var(--success-color);
+}
+
 .anomaly-header {
     display: flex;
     justify-content: space-between;
@@ -404,6 +408,11 @@ tr:hover {
 .severity-medium {
     background: rgba(0, 168, 225, 0.2);
     color: var(--secondary-color);
+}
+
+.severity-low {
+    background: rgba(40, 167, 69, 0.2);
+    color: var(--success-color);
 }
 
 .anomaly-description {

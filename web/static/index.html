@@ -691,7 +691,7 @@
                     <div class="card">
                         <div class="card-header">
                             <h3>Recent Anomalies</h3>
-                            <button class="btn btn-sm" onclick="refreshDashboard()">
+                            <button class="btn btn-sm" onclick="window.app.refreshDashboard()">
                                 <i class="fas fa-sync-alt"></i> Refresh
                             </button>
                         </div>
@@ -709,7 +709,7 @@
                     <div class="card">
                         <div class="card-header">
                             <h3>Discovered Devices</h3>
-                            <button class="btn btn-sm" onclick="refreshDevices()">
+                            <button class="btn btn-sm" onclick="window.app.refreshDevices()">
                                 <i class="fas fa-sync-alt"></i> Refresh
                             </button>
                         </div>
@@ -728,14 +728,74 @@
                         <div class="card-header">
                             <h3>All Anomalies</h3>
                             <div class="filter-group">
-                                <select id="anomalyTypeFilter" class="filter-select" onchange="filterAnomalies()">
+                                <select id="anomalyTypeFilter" class="filter-select" onchange="window.app.filterAnomalies()">
                                     <option value="">All Types</option>
                                     <option value="duplicate_ip">Duplicate IP</option>
                                     <option value="duplicate_instance">Duplicate Instance</option>
                                     <option value="multi_instance_ip">Multi-Instance IP</option>
                                     <option value="mac_multi_ip">MAC Multi-IP</option>
+                                    <optgroup label="Addressing">
+                                        <option value="arp_conflict">ARP Conflict</option>
+                                        <option value="mstp_conflict">MS/TP Address Conflict</option>
+                                        <option value="device_identity_change">Device Identity Change</option>
+                                        <option value="invalid_device_instance">Invalid Device Instance</option>
+                                    </optgroup>
+                                    <optgroup label="Transactions">
+                                        <option value="device_unresponsive">Device Unresponsive</option>
+                                        <option value="request_timeouts">Request Timeouts</option>
+                                        <option value="request_retries">Request Retries</option>
+                                        <option value="slow_response">Slow Response</option>
+                                        <option value="device_busy">Device Busy</option>
+                                        <option value="bacnet_errors">Error PDUs</option>
+                                        <option value="bacnet_reject">Reject</option>
+                                        <option value="bacnet_abort">Abort</option>
+                                        <option value="segmentation_issue">Segmentation Issue</option>
+                                        <option value="file_transfer_failed">File Transfer Failed</option>
+                                        <option value="file_transfer_stalled">File Transfer Stalled</option>
+                                        <option value="backup_restore_incomplete">Backup/Restore Incomplete</option>
+                                        <option value="backup_restore">Backup/Restore Run</option>
+                                    </optgroup>
+                                    <optgroup label="Security">
+                                        <option value="sensitive_command">Sensitive Command</option>
+                                        <option value="access_denied">Access Denied</option>
+                                        <option value="cleartext_password">Cleartext Password</option>
+                                        <option value="password_bruteforce">Password Brute Force</option>
+                                        <option value="bbmd_config_change">BBMD Table Change</option>
+                                        <option value="bbmd_reconnaissance">BBMD Table Read</option>
+                                        <option value="foreign_device_registration">Foreign Device</option>
+                                    </optgroup>
+                                    <optgroup label="Traffic">
+                                        <option value="broadcast_storm">Broadcast Storm</option>
+                                        <option value="remote_network_load">Remote Network Load</option>
+                                        <option value="who_is_flood">Who-Is Flood</option>
+                                        <option value="i_am_flood">I-Am Flood</option>
+                                        <option value="cov_flood">COV Flood</option>
+                                        <option value="service_flood">Service Flood</option>
+                                        <option value="duplicate_broadcast">Duplicate Broadcast</option>
+                                        <option value="missing_device">Missing Device</option>
+                                        <option value="time_sync_conflict">Time Sync Conflict</option>
+                                        <option value="protocol_violation">Protocol Violation</option>
+                                    </optgroup>
+                                    <optgroup label="Network layer">
+                                        <option value="router_conflict">Router Conflict</option>
+                                        <option value="network_number_conflict">Network Number Conflict</option>
+                                        <option value="network_reject">Network Reject</option>
+                                        <option value="router_busy">Router Busy</option>
+                                        <option value="who_is_router_flood">Who-Is-Router Flood</option>
+                                        <option value="unreachable_network">Unreachable Network</option>
+                                        <option value="routing_loop">Routing Loop</option>
+                                        <option value="excessive_hops">Excessive Hops</option>
+                                    </optgroup>
+                                    <optgroup label="Link layer">
+                                        <option value="bvlc_nak">BVLC NAK</option>
+                                        <option value="nonstandard_port">Non-standard Port</option>
+                                        <option value="malformed_packet">Malformed Packet</option>
+                                        <option value="mstp_crc_error">MS/TP CRC Error</option>
+                                        <option value="mstp_invalid_master">Invalid MS/TP Master</option>
+                                        <option value="duplicate_packets">Duplicate Packets</option>
+                                    </optgroup>
                                 </select>
-                                <button class="btn btn-sm" onclick="refreshAnomalies()">
+                                <button class="btn btn-sm" onclick="window.app.refreshAnomalies()">
                                     <i class="fas fa-sync-alt"></i> Refresh
                                 </button>
                             </div>
@@ -770,9 +830,8 @@
                             </div>
                             <div class="chat-input-container">
                                 <input type="text" id="chatInput" class="chat-input"
-                                    placeholder="Ask about network security, devices, or anomalies..."
-                                    onkeypress="handleChatKeyPress(event)">
-                                <button class="btn btn-primary" onclick="sendChatMessage()">
+                                    placeholder="Ask about network security, devices, or anomalies...">
+                                <button class="btn btn-primary" onclick="window.app.sendChatMessage()">
                                     <i class="fas fa-paper-plane"></i> Send
                                 </button>
                             </div>
@@ -874,7 +933,7 @@
             <div class="toast-title">New Anomaly Detected</div>
             <div class="toast-message"></div>
         </div>
-        <button class="toast-close" onclick="closeToast()">
+        <button class="toast-close" onclick="window.app.closeToast()">
             <i class="fas fa-times"></i>
         </button>
     </div>
@@ -1057,6 +1116,12 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        // "broadcast_storm" -> "Broadcast Storm"
+        function formatAnomalyType(type) {
+            const words = String(type || 'unknown').replace(/_/g, ' ');
+            return escapeHtml(words.replace(/\b\w/g, c => c.toUpperCase()));
         }
 
         function clearAllNotifications() {
