@@ -70,9 +70,14 @@ body {
     gap: 2rem;
 }
 
-.nxp-logo {
-    height: 40px;
+/* The Future Electronics logo has black lettering, so it sits on a white
+   badge to stay readable on the dark header. */
+.brand-logo {
+    height: 44px;
     width: auto;
+    background: #fff;
+    border-radius: 6px;
+    padding: 4px 8px;
 }
 
 .status-indicator {
