@@ -381,6 +381,19 @@ class DashboardController extends BaseViewController {
 
         const networkStatus = this.calculateNetworkStatus(stats.recent_anomalies_24h);
         this.updateElement('networkStatus', networkStatus);
+        this.updateStatusIcon(networkStatus);
+    }
+
+    // Match the status card's icon and colour to the status text
+    updateStatusIcon(status) {
+        const box = document.getElementById('networkStatusIcon');
+        if (!box) return;
+        const [color, icon] = {
+            'At Risk': ['red', 'fa-exclamation-triangle'],
+            'Warning': ['orange', 'fa-exclamation-circle'],
+        }[status] || ['green', 'fa-check-circle'];
+        box.className = `stat-icon ${color}`;
+        box.innerHTML = `<i class="fas ${icon}"></i>`;
     }
 
     calculateNetworkStatus(recentAnomalies) {

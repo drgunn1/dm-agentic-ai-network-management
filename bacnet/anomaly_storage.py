@@ -10,7 +10,7 @@ import sqlite3
 import json
 from pathlib import Path
 from typing import List, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 class AnomalyStorage:
@@ -332,6 +332,14 @@ class AnomalyStorage:
         """)
         type_counts = dict(cursor.fetchall())
         
+        # Unresolved anomalies detected in the last 24 hours (the dashboard's
+        # "Last 24 Hours" card and network status use this). Timestamps are
+        # ISO strings, so they compare correctly as text.
+        since = (datetime.now() - timedelta(hours=24)).isoformat()
+        cursor.execute(
+            "SELECT COUNT(*) FROM anomalies WHERE resolved = 0 AND timestamp >= ?", (since,))
+        recent_anomalies_24h = cursor.fetchone()[0]
+
         # Total packets
         cursor.execute("SELECT SUM(packet_count) FROM devices")
         total_packets = cursor.fetchone()[0] or 0
@@ -342,6 +350,7 @@ class AnomalyStorage:
             'total_devices': total_devices,
             'total_anomalies': total_anomalies,
             'unresolved_anomalies': unresolved_anomalies,
+            'recent_anomalies_24h': recent_anomalies_24h,
             'total_packets': total_packets,
             'severity_counts': severity_counts,
             'type_counts': type_counts,
